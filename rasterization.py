@@ -1,12 +1,18 @@
+# Algoritmos de rasterizacao de retas e circunferencias
+
+
+# Rasterizacao de reta pelo algoritmo DDA
 def dda(x1, y1, x2, y2):
     pontos = []
     dx = x2 - x1
     dy = y2 - y1
 
+    # Usa o maior delta como numero de passos
     passos = abs(dx) if abs(dx) >= abs(dy) else abs(dy)
     if passos == 0:
         return [(round(x1), round(y1))]
 
+    # Incremento por passo em cada eixo
     x_incr = dx / passos
     y_incr = dy / passos
     x = x1
@@ -21,6 +27,7 @@ def dda(x1, y1, x2, y2):
     return pontos
 
 
+# Rasterizacao de reta pelo algoritmo de Bresenham (usa apenas inteiros)
 def bresenham_reta(x1, y1, x2, y2):
     pontos = []
 
@@ -32,6 +39,7 @@ def bresenham_reta(x1, y1, x2, y2):
     dx = x2 - x1
     dy = y2 - y1
 
+    # Determina a direcao do incremento em cada eixo
     if dx >= 0:
         incrx = 1
     else:
@@ -49,7 +57,8 @@ def bresenham_reta(x1, y1, x2, y2):
     pontos.append((x, y))
 
     if dy < dx:
-        p = 2 * dy - dx
+        # Caso onde X eh o eixo de maior variacao
+        p = 2 * dy - dx  # variavel de decisao
         const1 = 2 * dy
         const2 = 2 * (dy - dx)
         for _ in range(dx):
@@ -61,6 +70,7 @@ def bresenham_reta(x1, y1, x2, y2):
                 p += const2
             pontos.append((x, y))
     else:
+        # Caso onde Y eh o eixo de maior variacao
         p = 2 * dx - dy
         const1 = 2 * dx
         const2 = 2 * (dx - dy)
@@ -76,6 +86,7 @@ def bresenham_reta(x1, y1, x2, y2):
     return pontos
 
 
+# Espelha um ponto nos 8 octantes da circunferencia
 def _simetria_octantes(xc, yc, x, y):
     return [
         (xc + x, yc + y),
@@ -89,8 +100,9 @@ def _simetria_octantes(xc, yc, x, y):
     ]
 
 
+# Rasterizacao de circunferencia pelo algoritmo de Bresenham
 def bresenham_circulo(xc, yc, raio):
-    pontos = set()
+    pontos = set()  # set evita pontos duplicados da simetria
 
     xc = int(round(xc))
     yc = int(round(yc))
@@ -98,11 +110,12 @@ def bresenham_circulo(xc, yc, raio):
 
     x = 0
     y = r
-    p = 3 - (2 * r)
+    p = 3 - (2 * r)  # variavel de decisao inicial
 
     for pt in _simetria_octantes(xc, yc, x, y):
         pontos.add(pt)
 
+    # Calcula apenas 1/8 da circunferencia e espelha o restante
     while x < y:
         if p < 0:
             p = p + (4 * x) + 6

@@ -1,3 +1,6 @@
+# Interface grafica do trabalho de Computacao Grafica
+# Permite desenhar primitivas, aplicar transformacoes e recorte
+
 import tkinter as tk
 from tkinter import messagebox
 
@@ -16,13 +19,13 @@ class App(tk.Tk):
         self.canvas_width = 1100
         self.canvas_height = 520
 
-        self.objetos = []
-        self.objetos_selecionados = []
-        self.pontos_temp = []
+        self.objetos = []              # todos os objetos desenhados
+        self.objetos_selecionados = []  # objetos dentro da area de selecao
+        self.pontos_temp = []           # pontos temporarios durante criacao
 
         self.modo_atual = "RETA_BRESENHAM"
-        self.start_selection = None
-        self.end_selection = None
+        self.start_selection = None     # canto inicial da selecao
+        self.end_selection = None       # canto final da selecao
 
         self._criar_interface()
 
@@ -131,6 +134,7 @@ class App(tk.Tk):
             self.canvas.create_image((0, 0), image=self.img, anchor="nw", tags="img")
             self.redesenhar()
 
+    # Trata cliques no canvas conforme o modo atual
     def on_click(self, event):
         x, y = event.x, event.y
 
@@ -193,6 +197,7 @@ class App(tk.Tk):
         self.redesenhar()
         messagebox.showinfo("Selecao", f"{len(self.objetos_selecionados)} objeto(s) selecionado(s).")
 
+    # Fecha o poligono com os pontos coletados ate agora
     def finaliza_poligono(self):
         if len(self.pontos_temp) < 3:
             messagebox.showerror("Erro", "Poligono precisa de pelo menos 3 pontos.")
@@ -294,6 +299,7 @@ class App(tk.Tk):
 
         self._aplicar_em_objetos_selecionados(op)
 
+    # Aplica recorte (clipping) nas retas dentro da area selecionada
     def recortar_selecao(self, tipo):
         if not self.start_selection or not self.end_selection:
             messagebox.showinfo("Aviso", "Selecione uma area retangular antes do recorte.")
@@ -327,6 +333,7 @@ class App(tk.Tk):
         self.objetos_selecionados = self._objetos_na_janela()
         self.redesenhar()
 
+    # Retorna os objetos cuja bounding box intersecta a area de selecao
     def _objetos_na_janela(self):
         if not self.start_selection or not self.end_selection:
             return []
@@ -376,6 +383,7 @@ class App(tk.Tk):
         bx1, by1, bx2, by2 = bb2
         return ax1 <= bx2 and ax2 >= bx1 and ay1 <= by2 and ay2 >= by1
 
+    # Redesenha todos os objetos no canvas (objetos selecionados ficam em vermelho)
     def redesenhar(self):
         self.img.blank()
 
@@ -404,6 +412,7 @@ class App(tk.Tk):
                 tags="sel",
             )
 
+    # Rasteriza e desenha um objeto pixel a pixel
     def _desenhar_objeto(self, obj, cor):
         if isinstance(obj, Ponto):
             self.set_pixel(obj.x, obj.y, cor)
@@ -433,6 +442,7 @@ class App(tk.Tk):
                 for x, y in r.bresenham_reta(p1.x, p1.y, p2.x, p2.y):
                     self.set_pixel(x, y, cor)
 
+    # Pinta um pixel na imagem (ignora se estiver fora dos limites)
     def set_pixel(self, x, y, color):
         xi = int(round(x))
         yi = int(round(y))
