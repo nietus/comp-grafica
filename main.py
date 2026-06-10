@@ -5,9 +5,10 @@ import tkinter as tk
 from tkinter import messagebox
 
 import clipping as c
+import curvas as cv
 import rasterization as r
 import transformations as t
-from models import Circunferencia, Poligono, Ponto, Reta
+from models import Circunferencia, Curva, Poligono, Ponto, Reta
 
 
 class App(tk.Tk):
@@ -56,6 +57,9 @@ class App(tk.Tk):
         tk.Button(frame_formas, text="Circunferencia", command=lambda: self.set_modo("CIRCULO")).pack(side=tk.LEFT)
         tk.Button(frame_formas, text="Poligono", command=lambda: self.set_modo("POLIGONO")).pack(side=tk.LEFT)
         tk.Button(frame_formas, text="Finalizar Poligono", command=self.finaliza_poligono).pack(side=tk.LEFT)
+        tk.Button(frame_formas, text="Curva Bezier", command=lambda: self.set_modo("CURVA_BEZIER")).pack(side=tk.LEFT)
+        tk.Button(frame_formas, text="Curva B-Spline", command=lambda: self.set_modo("CURVA_BSPLINE")).pack(side=tk.LEFT)
+        tk.Button(frame_formas, text="Finalizar Curva", command=self.finaliza_curva).pack(side=tk.LEFT)
         tk.Button(frame_formas, text="Selecionar Area", command=lambda: self.set_modo("SELECIONAR")).pack(side=tk.LEFT)
         tk.Button(frame_formas, text="Limpar Tudo", command=self.limpar).pack(side=tk.RIGHT)
 
@@ -174,6 +178,12 @@ class App(tk.Tk):
         if self.modo_atual == "POLIGONO":
             self.pontos_temp.append((x, y))
             self.redesenhar()
+            return
+
+        if self.modo_atual in ("CURVA_BEZIER", "CURVA_BSPLINE"):
+            # Cada clique adiciona um ponto de controle da curva
+            self.pontos_temp.append((x, y))
+            self.redesenhar()
 
     def on_drag(self, event):
         if self.modo_atual == "SELECIONAR" and self.start_selection:
@@ -208,6 +218,27 @@ class App(tk.Tk):
         self.pontos_temp.clear()
         self.redesenhar()
 
+    # Fecha a curva com os pontos de controle coletados ate agora
+    def finaliza_curva(self):
+        if self.modo_atual not in ("CURVA_BEZIER", "CURVA_BSPLINE"):
+            messagebox.showinfo("Aviso", "Selecione o modo Curva Bezier ou Curva B-Spline antes.")
+            return
+
+        tipo = "BEZIER" if self.modo_atual == "CURVA_BEZIER" else "BSPLINE"
+        minimo = 2 if tipo == "BEZIER" else 4
+
+        if len(self.pontos_temp) < minimo:
+            messagebox.showerror(
+                "Erro",
+                f"Curva {tipo} precisa de pelo menos {minimo} pontos de controle.",
+            )
+            return
+
+        pontos = [Ponto(x, y) for x, y in self.pontos_temp]
+        self.objetos.append(Curva(pontos, tipo=tipo))
+        self.pontos_temp.clear()
+        self.redesenhar()
+
     def _obter_centro_transformacao(self):
         if self.start_selection and self.end_selection:
             x1, y1 = self.start_selection
@@ -239,6 +270,9 @@ class App(tk.Tk):
                     p.x, p.y = t.translacao_raw(p.x, p.y, dx, dy)
             elif isinstance(obj, Circunferencia):
                 obj.centro.x, obj.centro.y = t.translacao_raw(obj.centro.x, obj.centro.y, dx, dy)
+            elif isinstance(obj, Curva):
+                for p in obj.pontos_controle:
+                    p.x, p.y = t.translacao_raw(p.x, p.y, dx, dy)
 
         self._aplicar_em_objetos_selecionados(op)
 
@@ -257,6 +291,9 @@ class App(tk.Tk):
                     p.x, p.y = t.rotacao_raw(p.x, p.y, angulo, cx, cy)
             elif isinstance(obj, Circunferencia):
                 obj.centro.x, obj.centro.y = t.rotacao_raw(obj.centro.x, obj.centro.y, angulo, cx, cy)
+            elif isinstance(obj, Curva):
+                for p in obj.pontos_controle:
+                    p.x, p.y = t.rotacao_raw(p.x, p.y, angulo, cx, cy)
 
         self._aplicar_em_objetos_selecionados(op)
 
@@ -278,6 +315,9 @@ class App(tk.Tk):
                 obj.centro.x, obj.centro.y = t.escala_raw(obj.centro.x, obj.centro.y, sx, sy, cx, cy)
                 fator = max(abs(sx), abs(sy))
                 obj.raio = abs(obj.raio * fator)
+            elif isinstance(obj, Curva):
+                for p in obj.pontos_controle:
+                    p.x, p.y = t.escala_raw(p.x, p.y, sx, sy, cx, cy)
 
         self._aplicar_em_objetos_selecionados(op)
 
@@ -296,6 +336,9 @@ class App(tk.Tk):
                     p.x, p.y = t.reflexao_raw(p.x, p.y, tipo, cx, cy)
             elif isinstance(obj, Circunferencia):
                 obj.centro.x, obj.centro.y = t.reflexao_raw(obj.centro.x, obj.centro.y, tipo, cx, cy)
+            elif isinstance(obj, Curva):
+                for p in obj.pontos_controle:
+                    p.x, p.y = t.reflexao_raw(p.x, p.y, tipo, cx, cy)
 
         self._aplicar_em_objetos_selecionados(op)
 
@@ -326,6 +369,12 @@ class App(tk.Tk):
                             algoritmo=obj.algoritmo,
                         )
                     )
+            elif isinstance(obj, Curva):
+                # Guarda a janela na curva; cada segmento sera recortado no
+                # desenho reaproveitando o mesmo algoritmo de recorte de reta.
+                obj.janela_recorte = (xmin, ymin, xmax, ymax)
+                obj.tipo_recorte = tipo
+                novos_objetos.append(obj)
             else:
                 novos_objetos.append(obj)
 
@@ -375,6 +424,11 @@ class App(tk.Tk):
                 obj.centro.x + obj.raio,
                 obj.centro.y + obj.raio,
             )
+
+        if isinstance(obj, Curva) and obj.pontos_controle:
+            xs = [p.x for p in obj.pontos_controle]
+            ys = [p.y for p in obj.pontos_controle]
+            return min(xs), min(ys), max(xs), max(ys)
         return None
 
     @staticmethod
@@ -399,6 +453,17 @@ class App(tk.Tk):
                 x2, y2 = self.pontos_temp[i]
                 for x, y in r.bresenham_reta(x1, y1, x2, y2):
                     self.set_pixel(x, y, "#0066cc")
+
+        # Pre-visualizacao da curva durante a criacao: mostra o poligono de
+        # controle (linhas) e os pontos de controle ja clicados.
+        if self.modo_atual in ("CURVA_BEZIER", "CURVA_BSPLINE") and self.pontos_temp:
+            for i in range(1, len(self.pontos_temp)):
+                x1, y1 = self.pontos_temp[i - 1]
+                x2, y2 = self.pontos_temp[i]
+                for x, y in r.bresenham_reta(x1, y1, x2, y2):
+                    self.set_pixel(x, y, "#aaaaaa")
+            for x, y in self.pontos_temp:
+                self._marcar_ponto_controle(x, y, "#0066cc")
 
         self.canvas.delete("sel")
         if self.start_selection and self.end_selection:
@@ -441,6 +506,46 @@ class App(tk.Tk):
                 p2 = obj.pontos[(i + 1) % n]
                 for x, y in r.bresenham_reta(p1.x, p1.y, p2.x, p2.y):
                     self.set_pixel(x, y, cor)
+            return
+
+        if isinstance(obj, Curva):
+            pts = [(p.x, p.y) for p in obj.pontos_controle]
+            curva = cv.gerar_curva(pts, obj.tipo)
+            # Liga os pontos amostrados da curva com segmentos de reta (Bresenham).
+            # Se a curva tiver janela de recorte, cada segmento e recortado antes
+            # de ser desenhado, reaproveitando o algoritmo de clipping de reta.
+            for i in range(1, len(curva)):
+                x1, y1 = curva[i - 1]
+                x2, y2 = curva[i]
+
+                if obj.janela_recorte:
+                    xmin, ymin, xmax, ymax = obj.janela_recorte
+                    if obj.tipo_recorte == "COHEN":
+                        recorte = c.cohen_sutherland(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
+                    else:
+                        recorte = c.liang_barsky(x1, y1, x2, y2, xmin, ymin, xmax, ymax)
+                    if not recorte:
+                        continue  # segmento totalmente fora da janela
+                    x1, y1, x2, y2 = recorte
+
+                for x, y in r.bresenham_reta(x1, y1, x2, y2):
+                    self.set_pixel(x, y, cor)
+
+            # Marca os pontos de controle apenas quando a curva nao foi recortada
+            # (depois do recorte mostramos so a parte visivel da curva).
+            if not obj.janela_recorte:
+                cor_ctrl = "#d00000" if cor == "#d00000" else "#0066cc"
+                for p in obj.pontos_controle:
+                    self._marcar_ponto_controle(p.x, p.y, cor_ctrl)
+            return
+
+    # Desenha um pequeno marcador (cruz) sobre um ponto de controle de curva
+    def _marcar_ponto_controle(self, x, y, cor):
+        xi = int(round(x))
+        yi = int(round(y))
+        for d in range(-2, 3):
+            self.set_pixel(xi + d, yi, cor)
+            self.set_pixel(xi, yi + d, cor)
 
     # Pinta um pixel na imagem (ignora se estiver fora dos limites)
     def set_pixel(self, x, y, color):

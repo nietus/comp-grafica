@@ -27,3 +27,13 @@ class Circunferencia:
     def __init__(self, centro, raio):
         self.centro = centro
         self.raio = raio
+
+class Curva:
+    # tipo: "BEZIER" ou "BSPLINE"
+    def __init__(self, pontos_controle, tipo="BEZIER"):
+        self.pontos_controle = pontos_controle  # lista de Ponto (poligono de controle)
+        self.tipo = tipo
+        # Janela de recorte aplicada a curva (None = sem recorte).
+        # Quando definida, cada segmento da curva e recortado no desenho.
+        self.janela_recorte = None       # (xmin, ymin, xmax, ymax)
+        self.tipo_recorte = None          # "COHEN" ou "LIANG"
